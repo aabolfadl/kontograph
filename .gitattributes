@@ -1,0 +1,25 @@
+# Normalise to LF in the repository; check out native on Windows.
+# Without this, a file written on Windows and read in the Linux CI container
+# differs by line ending, which is enough to change a content hash — and this
+# project identifies datasets and configs *by* content hash (ADR-0009).
+* text=auto eol=lf
+
+# Scripts that must keep their platform's endings to be executable at all.
+*.ps1 text eol=crlf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.sh  text eol=lf
+Makefile text eol=lf
+
+# Binary: never touch.
+*.png binary
+*.jpg binary
+*.pdf binary
+*.onnx binary
+*.pt binary
+*.parquet binary
+*.db binary
+
+# Keep generated notebooks out of language stats and diffs.
+*.ipynb linguist-vendored
+uv.lock linguist-generated

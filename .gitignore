@@ -1,0 +1,55 @@
+# ---- SECRETS: never commit ----
+kaggle.json
+.kaggle/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+htmlcov/
+.coverage
+.coverage.*
+
+# ---- Data & artifacts (regenerated from a commit hash) ----
+data/
+artifacts/
+mlruns/
+mlartifacts/
+*.duckdb
+*.duckdb.wal
+*.parquet
+*.onnx
+*.ckpt
+*.pt
+warehouse/
+
+# ---- Node / UI ----
+node_modules/
+
+# ---- Editors / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# ---- Dagster / dbt ----
+.dagster_home/
+.tmp_dagster_home_*/
+dbt/kontograph/target/
+dbt/kontograph/dbt_packages/
+dbt/kontograph/logs/
+# dbt writes an anonymous tracking id here; machine-local, never committed.
+dbt/**/.user.yml
+

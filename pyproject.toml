@@ -1,0 +1,115 @@
+# KONTOGRAPH — uv workspace root.
+# The root is a *virtual* project (no code of its own); it exists to pin the
+# toolchain and to install every workspace member into one .venv.
+[project]
+name = "kontograph"
+version = "0.1.0"
+description = "Real-time financial-crime intelligence for the German payments rail"
+requires-python = ">=3.11,<3.14"
+dependencies = [
+]
+
+[project.optional-dependencies]
+# Great Expectations is NOT a default dependency: measured at ~10 s import time
+# (62 s cold), which is prohibitive for an assertion that runs inline in every
+# pipeline step and in CI. The blocking gate is implemented natively over Arrow
+# and DuckDB; GE is used for the rich published quality report, where a slow
+# import costs nothing. See ADR-0011.
+quality = [
+    "great-expectations>=1.0",
+]
+# Orchestration and the analytics marts. Separated so a contributor who only
+# wants to run the simulator or the tests does not pay for them.
+orchestration = [
+    "dagster>=1.8",
+    "dagster-webserver>=1.8",
+    "dbt-core>=1.8",
+    "dbt-duckdb>=1.8",
+]
+# Torch is ~200 MB and is only needed for the GNN spike. Local CPU work
+# (simulator, features, LightGBM baseline, serving via ONNX) does not need it.
+# On Kaggle these come preinstalled; see kaggle/README.md.
+torch = [
+    "torch>=2.2",
+    "torch-geometric>=2.5",
+]
+# The Kaggle client, for the GPU training round trip. Only needed to push and
+# pull; the notebooks themselves run on Kaggle's own image.
+kaggle = [
+    "kaggle>=1.6",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "pytest-asyncio>=0.23",
+    "hypothesis>=6.100",
+    "ruff>=0.6",
+    "mypy>=1.11",
+    "types-PyYAML",
+    "httpx>=0.27",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv.sources]
+
+# ---------------------------------------------------------------- tooling ---
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+extend-exclude = ["kaggle/*.ipynb"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "C4", "RUF", "PTH", "N"]
+ignore = [
+    "E501",   # line length is handled by the formatter
+    "B008",   # FastAPI/Typer idiom: function call in argument default
+    "RUF001", # ambiguous unicode: we legitimately use € and German umlauts
+    "RUF002",
+    "RUF003",
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["kg_core", "kg_sim", "kg_lake", "kg_features", "kg_models", "kg_eval", "kg_serve", "kg_gov", "kg_stream", "kg_cli"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["N802", "N803", "N806"]
+# `X` for a design matrix and `y` for a target are the universal convention in
+# machine-learning code. Renaming them to `x_train` would satisfy the linter and
+# make every ML reader do a double-take, which is the wrong trade.
+"packages/kg_models/**" = ["N803", "N806"]
+"packages/kg_eval/**" = ["N803", "N806"]
+"packages/kg_cli/src/kg_cli/evaluate.py" = ["N803", "N806"]
+"packages/kg_cli/src/kg_cli/serve.py" = ["N803", "N806"]
+"packages/kg_serve/src/kg_serve/onnx_export.py" = ["N803", "N806"]
+# Dagster resolves annotations at runtime; PEP 563 breaks its context injection.
+"orchestration/dagster/definitions.py" = ["I002", "FA100", "FA102"]
+
+[tool.mypy]
+# 3.12 even though the package supports 3.11 at runtime: numpy's bundled stubs
+# use PEP 695 `type` statements, which mypy can only parse when targeting 3.12+.
+# Runtime support is unaffected and CI still runs the test suite on both.
+python_version = "3.12"
+warn_unused_configs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+disallow_untyped_defs = true
+no_implicit_optional = true
+ignore_missing_imports = true
+mypy_path = "packages/kg_core/src:packages/kg_sim/src:packages/kg_lake/src:packages/kg_features/src:packages/kg_models/src:packages/kg_eval/src:packages/kg_serve/src:packages/kg_gov/src:packages/kg_stream/src:packages/kg_cli/src"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q --strict-markers"
+markers = [
+    "integration: requires the docker compose stack to be up",
+    "slow: takes more than a few seconds",
+    "torch: requires the optional torch extra",
+]
+filterwarnings = ["error::DeprecationWarning:kg_.*"]
