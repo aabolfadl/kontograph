@@ -7,6 +7,7 @@ version = "0.1.0"
 description = "Real-time financial-crime intelligence for the German payments rail"
 requires-python = ">=3.11,<3.14"
 dependencies = [
+    "kg-core",
 ]
 
 [project.optional-dependencies]
@@ -58,6 +59,7 @@ package = false
 members = ["packages/*"]
 
 [tool.uv.sources]
+kg-core = { workspace = true }
 
 # ---------------------------------------------------------------- tooling ---
 [tool.ruff]
