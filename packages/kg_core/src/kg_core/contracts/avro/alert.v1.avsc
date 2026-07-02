@@ -1,0 +1,51 @@
+{
+  "type": "record",
+  "namespace": "de.kontograph.alerts",
+  "name": "Alert",
+  "doc": "A scoring decision emitted by the gateway. Doubles as the GDPR Art. 22 decision-log record: it carries what was decided, by which model version, against which feature definitions, and the explanation that was shown - because meaningful information about the logic involved must be persisted at decision time, not reconstructed afterwards.",
+  "fields": [
+    {"name": "schema_version", "type": "int", "default": 1},
+    {"name": "alert_id", "type": "string"},
+    {"name": "tx_id", "type": "string"},
+    {"name": "scored_ts", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+
+    {"name": "score", "type": "double", "doc": "Calibrated probability in [0,1]."},
+    {"name": "threshold", "type": "double", "doc": "The cost-sensitive operating point in force at decision time."},
+    {"name": "decision", "type": {"type": "enum", "name": "Decision", "symbols": ["ALLOW", "ALERT", "HOLD", "BLOCK"]}},
+
+    {"name": "model_name", "type": "string"},
+    {"name": "model_version", "type": "string"},
+    {"name": "feature_set_hash", "type": "string", "doc": "Fingerprint of the compiled feature definitions. Ties the decision to an exact transformation graph."},
+    {"name": "code_commit", "type": "string", "doc": "Git commit the serving image was built from."},
+
+    {"name": "latency_ms", "type": {"type": "record", "name": "LatencyBreakdown", "doc": "Per-stage budget, summing to the end-to-end SLA. Recorded per decision so the published latency histogram is measured rather than modelled.", "fields": [
+      {"name": "feature_fetch", "type": "double"},
+      {"name": "graph_assemble", "type": "double"},
+      {"name": "inference", "type": "double"},
+      {"name": "explain", "type": "double"},
+      {"name": "counterfactual", "type": "double"},
+      {"name": "total", "type": "double"}
+    ]}},
+
+    {"name": "explanation", "type": ["null", {"type": "record", "name": "Explanation", "fields": [
+      {"name": "edges", "type": {"type": "array", "items": {"type": "record", "name": "SalientEdge", "fields": [
+        {"name": "tx_id", "type": "string"},
+        {"name": "src_account_id", "type": "string"},
+        {"name": "dst_account_id", "type": "string"},
+        {"name": "ts", "type": "long"},
+        {"name": "importance", "type": "double"},
+        {"name": "hop", "type": "int"}
+      ]}}},
+      {"name": "comprehensiveness", "type": ["null", "double"], "default": null, "doc": "Score drop when the salient subgraph is removed. Higher is more faithful."},
+      {"name": "sufficiency", "type": ["null", "double"], "default": null, "doc": "Score retained when ONLY the salient subgraph is kept."},
+      {"name": "teacher_agreement", "type": ["null", "double"], "default": null, "doc": "Top-k rank agreement with the slow perturbation teacher. This is the fidelity gap we publish rather than hide."},
+      {"name": "counterfactual", "type": ["null", {"type": "record", "name": "Counterfactual", "fields": [
+        {"name": "removed_tx_ids", "type": {"type": "array", "items": "string"}},
+        {"name": "score_after", "type": "double"},
+        {"name": "crosses_threshold", "type": "boolean"},
+        {"name": "narrative_de", "type": "string"},
+        {"name": "narrative_en", "type": "string"}
+      ]}], "default": null}
+    ]}], "default": null}
+  ]
+}

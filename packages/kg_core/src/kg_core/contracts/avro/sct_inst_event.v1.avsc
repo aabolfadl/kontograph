@@ -1,0 +1,47 @@
+{
+  "type": "record",
+  "namespace": "de.kontograph.payments",
+  "name": "SctInstEvent",
+  "doc": "A SEPA Instant Credit Transfer (SCT Inst) as it crosses the wire, shaped after the ISO 20022 pacs.008 FIToFICustomerCreditTransfer with the fields a PSP fraud-monitoring tap actually sees. NOTE: this record deliberately carries NO ground-truth or typology field. Ground truth lives in a separate table (kg_sim.ground_truth) so that it is structurally impossible for a label to leak into a feature via the event contract.",
+  "fields": [
+    {"name": "schema_version", "type": "int", "default": 1, "doc": "Bumped only for breaking changes; the registry gate enforces backward compatibility."},
+
+    {"name": "tx_id", "type": "string", "doc": "Unique End-to-end Transaction Reference (UETR), uuid4."},
+    {"name": "end_to_end_id", "type": "string", "doc": "pacs.008 EndToEndId supplied by the originating party."},
+
+    {"name": "acceptance_ts", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "SCT Inst Acceptance Time Stamp: when the debtor PSP accepted the instruction. This is the event-time used for ALL point-in-time reasoning."},
+    {"name": "ingest_ts", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the event reached our platform. ingest_ts >= acceptance_ts; the difference is observable ingestion lag and is never used as a feature."},
+
+    {"name": "debtor_account_id", "type": "string", "doc": "Internal surrogate key for the debtor account (pseudonymous; see the GDPR memo)."},
+    {"name": "debtor_iban", "type": "string"},
+    {"name": "debtor_bic", "type": "string"},
+    {"name": "debtor_name", "type": "string", "doc": "Name as held on the debtor account record."},
+    {"name": "debtor_country", "type": "string", "default": "DE"},
+
+    {"name": "creditor_account_id", "type": "string"},
+    {"name": "creditor_iban", "type": "string"},
+    {"name": "creditor_bic", "type": "string"},
+    {"name": "creditor_name", "type": "string", "doc": "Name actually held on the creditor account at the creditor PSP."},
+    {"name": "creditor_country", "type": "string", "default": "DE"},
+
+    {"name": "creditor_name_claimed", "type": "string", "doc": "The payee name the payer TYPED. Diverges from creditor_name under APP fraud, impersonation, and honest typos - this pair is what Verification of Payee compares."},
+    {"name": "vop_result", "type": {"type": "enum", "name": "VopResult", "doc": "Verification of Payee outcome, mandatory across the euro area since 9 Oct 2025 (Reg. EU 2024/886).", "symbols": ["MATCH", "CLOSE_MATCH", "NO_MATCH", "NOT_APPLICABLE", "UNAVAILABLE"]}, "default": "MATCH"},
+    {"name": "vop_name_similarity", "type": "double", "default": 1.0, "doc": "Normalised [0,1] similarity between claimed and actual payee name. CLOSE_MATCH is the interesting band: too strict blocks honest payments, too loose lets impersonation through."},
+    {"name": "vop_overridden", "type": "boolean", "default": false, "doc": "Payer proceeded despite a NO_MATCH or CLOSE_MATCH warning. Strong APP-fraud signal, and legally significant for liability allocation."},
+
+    {"name": "amount_cents", "type": "long", "doc": "Minor units. Integers only - never a float for money."},
+    {"name": "currency", "type": "string", "default": "EUR"},
+
+    {"name": "purpose_code", "type": ["null", "string"], "default": null, "doc": "ISO 20022 ExternalPurpose code, e.g. SALA, RENT, GDDS, SUPP, LOAN."},
+    {"name": "remittance_info", "type": ["null", "string"], "default": null, "doc": "Verwendungszweck, free text, max 140 chars."},
+
+    {"name": "channel", "type": {"type": "enum", "name": "Channel", "symbols": ["ONLINE_BANKING", "MOBILE_APP", "POS", "STANDING_ORDER", "BATCH_UPLOAD", "OPEN_BANKING_API", "BRANCH"]}, "default": "ONLINE_BANKING"},
+    {"name": "initiation_source", "type": {"type": "enum", "name": "InitiationSource", "doc": "PSD2 / Berlin Group XS2A distinguishes a payment initiated through the ASPSP own channel from one initiated by a licensed third-party PISP.", "symbols": ["ASPSP_DIRECT", "PISP", "AISP_TRIGGERED"]}, "default": "ASPSP_DIRECT"},
+
+    {"name": "device_id", "type": ["null", "string"], "default": null},
+    {"name": "session_ip_prefix", "type": ["null", "string"], "default": null, "doc": "Truncated to /24 (v4) at the producer - data minimisation under DSGVO Art. 5(1)(c)."},
+    {"name": "is_new_beneficiary", "type": "boolean", "default": false, "doc": "First payment from this debtor to this creditor, as known to the debtor PSP at acceptance time."},
+
+    {"name": "settlement_status", "type": {"type": "enum", "name": "SettlementStatus", "symbols": ["ACCP", "ACSC", "RJCT", "PDNG"]}, "default": "ACSC", "doc": "pacs.002 status. Under SCT Inst this resolves within 10 seconds and ACSC is irrevocable - which is the entire reason this platform is streaming-first."}
+  ]
+}

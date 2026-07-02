@@ -1,0 +1,18 @@
+{
+  "type": "record",
+  "namespace": "de.kontograph.feedback",
+  "name": "AnalystFeedback",
+  "doc": "Investigator response to an alert, captured in the console and published back onto Kafka. This closes the loop drawn in the architecture diagram (UI feedback returns to the ingest topic). Note that it records whether the EXPLANATION helped separately from whether the alert was correct - an explainer can be perfectly faithful and still operationally useless.",
+  "fields": [
+    {"name": "schema_version", "type": "int", "default": 1},
+    {"name": "feedback_id", "type": "string"},
+    {"name": "alert_id", "type": "string"},
+    {"name": "analyst_id", "type": "string", "doc": "Pseudonymous. Human oversight under AI Act Art. 14 requires evidence that a human reviewed the case, not the reviewer identity."},
+    {"name": "submitted_ts", "type": {"type": "long", "logicalType": "timestamp-millis"}},
+    {"name": "verdict", "type": {"type": "enum", "name": "Verdict", "symbols": ["ESCALATE_SAR", "ESCALATE_INTERNAL", "DISMISS_FALSE_POSITIVE", "NEEDS_MORE_INFO"]}},
+    {"name": "explanation_helpful", "type": ["null", "boolean"], "default": null},
+    {"name": "explanation_rating", "type": ["null", "int"], "default": null, "doc": "1-5. Feeds the explanation-quality report, never the detector loss directly - optimising a model against analyst approval trains it to be persuasive rather than correct."},
+    {"name": "review_seconds", "type": ["null", "double"], "default": null, "doc": "Time-to-decision. The operational metric the compliance team is actually measured on."},
+    {"name": "rationale", "type": ["null", "string"], "default": null}
+  ]
+}

@@ -1,0 +1,21 @@
+{
+  "type": "record",
+  "namespace": "de.kontograph.labels",
+  "name": "LabelOutcome",
+  "doc": "A confirmed outcome for a transaction or account, arriving WEEKS after the event. design principle P7: labels are late, incomplete and selection-biased. The contract records decided_ts separately from event_ts precisely so that label delay is measurable and simulable rather than assumed away.",
+  "fields": [
+    {"name": "schema_version", "type": "int", "default": 1},
+    {"name": "label_id", "type": "string"},
+    {"name": "subject_type", "type": {"type": "enum", "name": "SubjectType", "symbols": ["TRANSACTION", "ACCOUNT"]}},
+    {"name": "subject_id", "type": "string", "doc": "tx_id or account_id depending on subject_type."},
+
+    {"name": "event_ts", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "Acceptance time of the underlying transaction."},
+    {"name": "decided_ts", "type": {"type": "long", "logicalType": "timestamp-millis"}, "doc": "When the outcome became known. (decided_ts - event_ts) IS the verification latency. Training may only use labels whose decided_ts precedes the split boundary."},
+
+    {"name": "label", "type": {"type": "enum", "name": "LabelValue", "symbols": ["CONFIRMED_FRAUD", "CONFIRMED_LAUNDERING", "SUSPICIOUS_UNPROVEN", "BENIGN", "UNKNOWN"]}},
+    {"name": "source", "type": {"type": "enum", "name": "LabelSource", "doc": "The label-generating process. ANALYST_REVIEW only ever fires on cases the incumbent system alerted on - that is the selection bias, made explicit in the contract rather than discovered later.", "symbols": ["ANALYST_REVIEW", "CUSTOMER_COMPLAINT", "CHARGEBACK", "LEA_REQUEST", "FIU_FEEDBACK", "CORRESPONDENT_BANK"]}},
+    {"name": "sar_filed", "type": "boolean", "default": false, "doc": "Whether a Verdachtsmeldung was filed with the German FIU."},
+    {"name": "confidence", "type": "double", "default": 1.0},
+    {"name": "notes", "type": ["null", "string"], "default": null}
+  ]
+}
