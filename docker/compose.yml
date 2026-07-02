@@ -1,0 +1,167 @@
+# KONTOGRAPH — the default local stack.
+#
+# Sized for a laptop: roughly 1.6 GB of images and ~2 GB of RAM. Flink and the
+# observability stack are deliberately NOT here; they live in compose.flink.yml
+# and compose.obs.yml behind profiles, because `make up` has to stay fast
+# enough that people actually run it (design principle P10).
+#
+# Redpanda is used rather than Kafka + a separate Confluent Schema Registry:
+# it is Kafka-API compatible and ships the Schema Registry in the same process,
+# which removes two containers and about 1 GB. See ADR-0001.
+
+name: kontograph
+
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.2.7
+    container_name: kontograph-redpanda
+    command:
+      - redpanda
+      - start
+      - --smp=1
+      - --memory=1G
+      - --reserve-memory=0M
+      - --overprovisioned          # laptop: do not assume dedicated cores
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=INTERNAL://0.0.0.0:9092,EXTERNAL://0.0.0.0:19092
+      - --advertise-kafka-addr=INTERNAL://redpanda:9092,EXTERNAL://localhost:19092
+      - --schema-registry-addr=INTERNAL://0.0.0.0:8081,EXTERNAL://0.0.0.0:18081
+      - --rpc-addr=redpanda:33145
+      - --advertise-rpc-addr=redpanda:33145
+    ports:
+      - "19092:19092"   # Kafka API (host)
+      - "18081:18081"   # Schema Registry (host)
+      - "19644:9644"    # Admin API / metrics
+    volumes:
+      - redpanda-data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -q 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  # Creates the topics up front so a consumer never races topic auto-creation
+  # and silently reads from a partition count it did not expect.
+  redpanda-init:
+    image: redpandadata/redpanda:v24.2.7
+    container_name: kontograph-redpanda-init
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        set -e
+        RPK="rpk --brokers redpanda:9092"
+        # Payments are keyed by debtor account so that all events for an
+        # account land on one partition, which is what makes per-key ordering
+        # (and therefore point-in-time correctness) hold in the stream.
+        $$RPK topic create kontograph.payments.sctinst.v1 -p 6 -r 1 --topic-config retention.ms=604800000 || true
+        $$RPK topic create kontograph.labels.outcome.v1   -p 3 -r 1 --topic-config retention.ms=2592000000 || true
+        $$RPK topic create kontograph.alerts.v1           -p 3 -r 1 --topic-config retention.ms=2592000000 || true
+        $$RPK topic create kontograph.feedback.analyst.v1 -p 1 -r 1 --topic-config retention.ms=2592000000 || true
+        echo "--- topics ---"
+        $$RPK topic list
+    restart: "no"
+
+  console:
+    image: redpandadata/console:v2.7.2
+    container_name: kontograph-console
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    environment:
+      KAFKA_BROKERS: redpanda:9092
+      KAFKA_SCHEMAREGISTRY_ENABLED: "true"
+      KAFKA_SCHEMAREGISTRY_URLS: http://redpanda:8081
+    ports:
+      - "8080:8080"
+
+  # S3-compatible object storage for the Iceberg warehouse and MLflow
+  # artifacts. SeaweedFS (Apache-2.0) rather than MinIO, whose community
+  # edition no longer publishes container images.
+  objectstore:
+    image: chrislusf/seaweedfs:3.97
+    container_name: kontograph-objectstore
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        printf '%s' '{"identities":[{"name":"kontograph","credentials":[{"accessKey":"kontograph","secretKey":"kontograph"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' > /tmp/s3.json
+        exec weed server -dir=/data -ip=objectstore -ip.bind=0.0.0.0 \
+          -s3 -s3.port=9000 -s3.config=/tmp/s3.json
+    ports:
+      - "9000:9000"   # S3 API
+      - "8888:8888"   # filer web UI (browse buckets)
+    volumes:
+      - objectstore-data:/data
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:9000/status"]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+
+  # Creates the bucket up front: neither pyiceberg nor MLflow creates one, and
+  # the first write would otherwise fail with NoSuchBucket. Idempotent.
+  objectstore-init:
+    image: chrislusf/seaweedfs:3.97
+    container_name: kontograph-objectstore-init
+    depends_on:
+      objectstore:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        set -e
+        SHELL_ARGS="-master=objectstore:9333 -filer=objectstore:8888"
+        echo "s3.bucket.create -name kontograph" | weed shell $$SHELL_ARGS
+        echo "s3.bucket.list" | weed shell $$SHELL_ARGS
+    restart: "no"
+
+  redis:
+    image: redis:7.4-alpine
+    container_name: kontograph-redis
+    # Online feature state and TGN node memory. appendonly keeps the memory
+    # module warm across a restart, so a restarted gateway does not silently
+    # score the first thousand transactions against empty node memory.
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1000"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  mlflow:
+    image: ghcr.io/mlflow/mlflow:v2.16.2
+    container_name: kontograph-mlflow
+    depends_on:
+      objectstore-init:
+        condition: service_completed_successfully
+    environment:
+      MLFLOW_S3_ENDPOINT_URL: http://objectstore:9000
+      AWS_ACCESS_KEY_ID: kontograph
+      AWS_SECRET_ACCESS_KEY: kontograph
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        pip install --no-cache-dir boto3 >/dev/null 2>&1
+        mlflow server \
+          --host 0.0.0.0 --port 5000 \
+          --backend-store-uri sqlite:////mlflow/mlflow.db \
+          --default-artifact-root s3://kontograph/artifacts/mlflow
+    ports:
+      - "5000:5000"
+    volumes:
+      - mlflow-data:/mlflow
+
+volumes:
+  redpanda-data:
+  objectstore-data:
+  redis-data:
+  mlflow-data:
