@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_FROZEN: "0"
+  KG_ENV: ci
+  KG_LOG_FORMAT: json
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Fast feedback: style and types. Runs first so a typo fails in 60 seconds
+  # rather than after the full suite.
+  # ---------------------------------------------------------------------------
+  static:
+    name: lint + types
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - name: ruff (lint)
+        run: uv run ruff check --output-format=github .
+      - name: ruff (format)
+        run: uv run ruff format --check .
+      - name: mypy
+        run: uv run mypy packages
+
+  # ---------------------------------------------------------------------------
+  # The data-contract gate (the platform scope, "backward-compat gates in CI").
+  #
+  # Needs the full history so it can diff each .avsc against its state on the
+  # base branch: a schema is only "changed" relative to what consumers already
+  # depend on. Deliberately a separate job so the failure is unmissable in the
+  # checks list rather than buried in test output.
+  # ---------------------------------------------------------------------------
+  contracts:
+    name: contract compatibility
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+
+      - name: Extract contracts as they exist on the base branch
+        run: |
+          BASE="${{ github.event.pull_request.base.sha || 'HEAD~1' }}"
+          mkdir -p /tmp/base-contracts
+          DIR=packages/kg_core/src/kg_core/contracts/avro
+          if git rev-parse --verify "$BASE" >/dev/null 2>&1; then
+            for f in $(git ls-tree -r --name-only "$BASE" -- "$DIR" || true); do
+              git show "$BASE:$f" > "/tmp/base-contracts/$(basename "$f")" || true
+            done
+          fi
+          ls -la /tmp/base-contracts || true
+
+      - name: Fail if any change would break existing consumers
+        run: uv run kg contracts check --against /tmp/base-contracts
+
+  # ---------------------------------------------------------------------------
+  # Unit + property tests. No broker, no object store: everything here must run
+  # without the stack, which is what keeps the suite usable as a pre-commit.
+  # ---------------------------------------------------------------------------
+  test:
+    name: tests (py${{ matrix.python }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv python install ${{ matrix.python }}
+      - run: uv sync --all-packages --python ${{ matrix.python }}
+
+      - name: pytest
+        run: uv run pytest -m "not integration" --cov=packages --cov-report=xml --cov-report=term-missing
+
+      - name: Upload coverage
+        if: matrix.python == '3.12'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: coverage.xml
