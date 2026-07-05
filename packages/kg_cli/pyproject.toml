@@ -5,6 +5,7 @@ description = "The kg command line — one entrypoint for every make target"
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "kg-core",
+    "kg-sim",
     "typer>=0.12",
     "rich>=13.7",
 ]

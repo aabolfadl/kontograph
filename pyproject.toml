@@ -8,6 +8,7 @@ description = "Real-time financial-crime intelligence for the German payments ra
 requires-python = ">=3.11,<3.14"
 dependencies = [
     "kg-core",
+    "kg-sim",
     "kg-cli",
 ]
 
@@ -61,6 +62,7 @@ members = ["packages/*"]
 
 [tool.uv.sources]
 kg-core = { workspace = true }
+kg-sim = { workspace = true }
 kg-cli = { workspace = true }
 
 # ---------------------------------------------------------------- tooling ---
