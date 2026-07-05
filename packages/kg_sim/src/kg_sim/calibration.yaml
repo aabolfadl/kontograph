@@ -1,0 +1,153 @@
+# KONTOGRAPH — behavioural calibration for the synthetic German retail
+# payments ecosystem.
+#
+# HONESTY NOTE (design principle P9 and the engineering invariants):
+#   These are **approximations of publicly reported aggregates**, not licensed
+#   Bundesbank or EBA microdata, and not fitted to any real transaction set.
+#   They are order-of-magnitude anchors chosen so the simulated ecosystem has
+#   realistic *structure* — payment frequencies, value distributions, and the
+#   ratio of recurring to one-off payments. Nothing here should be quoted as a
+#   statistic about German payments.
+#
+#   Provenance tags:
+#     [public]    approximates a figure published in aggregate form
+#                 (Deutsche Bundesbank Zahlungsverkehrsstatistik / payment
+#                 behaviour studies; EBA and EPC SEPA scheme reporting)
+#     [judgement] a modelling choice with no published counterpart
+#     [legal]     fixed by regulation or scheme rules, not estimated
+
+# ---------------------------------------------------------------- households
+household:
+  # Monthly net income, lognormal. Median anchored near German net household
+  # income; the long right tail is what makes large payments non-anomalous for
+  # a minority of accounts, which the model has to learn rather than threshold.
+  income_eur:
+    median: 2900          # [public] approximate median monthly net household income
+    sigma: 0.45           # [judgement] spread producing a plausible P10/P90 band
+    min: 1100
+    max: 25000
+
+  # Rent as a share of net income. Germany is a majority-renter country, which
+  # is why rent is modelled as a first-class recurring edge rather than folded
+  # into general spending.
+  rent_share:
+    mean: 0.30            # [public] housing cost burden, approximate
+    sigma: 0.08
+    min: 0.12
+    max: 0.55
+  renter_probability: 0.55  # [public] Germany has an unusually low ownership rate
+
+  # Households with no single employer: pensioners, students, the self-employed.
+  # A large share of German account holders, and behaviourally distinct — their
+  # income arrives from varied counterparties on varied days, so "regular salary
+  # from one payer" is a feature that genuinely separates populations rather
+  # than being true of everyone.
+  no_employer_share: 0.24   # [public] approximate, pensioners + students + self-employed
+
+  # Day-of-month behaviour. Salary lands on the last banking day; rent and
+  # standing orders cluster at the start of the month. This is the single most
+  # visible periodicity in the data and a strong seasonal feature.
+  salary_day: last_business_day   # [public] common German payroll convention
+  rent_day_range: [1, 3]          # [public] Mietvertrag convention
+  utilities_day_range: [3, 12]    # [judgement]
+
+  # Poisson intensities, events per week per household.
+  weekly_rates:
+    groceries: 3.4        # [public] scaled from cashless payments per capita
+    retail: 1.1           # [judgement]
+    ecommerce: 0.9        # [public] e-commerce share of retail, approximate
+    p2p: 0.55             # [judgement] instant P2P is growing fast post-2025
+    dining: 0.8           # [judgement]
+
+  # Value distributions per category, lognormal (EUR).
+  amounts:
+    groceries:  {median: 32,  sigma: 0.65, min: 3,  max: 400}
+    retail:     {median: 58,  sigma: 0.9,  min: 5,  max: 3000}
+    ecommerce:  {median: 44,  sigma: 1.0,  min: 5,  max: 5000}
+    p2p:        {median: 35,  sigma: 1.1,  min: 1,  max: 8000}
+    dining:     {median: 28,  sigma: 0.6,  min: 5,  max: 350}
+    utilities:  {median: 95,  sigma: 0.5,  min: 20, max: 900}
+    insurance:  {median: 78,  sigma: 0.6,  min: 12, max: 1200}
+    subscription: {median: 13, sigma: 0.5, min: 3,  max: 120}
+
+  # Size of the recurring counterparty set. Small and stable: households pay the
+  # same handful of merchants repeatedly, and it is *departure* from that set
+  # that carries signal. This is what makes is_new_beneficiary meaningful.
+  loyal_merchants: {min: 4, max: 12}    # [judgement]
+  social_circle:   {min: 3, max: 15}    # [judgement] P2P counterparties
+
+# ----------------------------------------------------------------- merchants
+merchant:
+  # Suppliers paid per week, and payroll obligations.
+  weekly_supplier_payments: 2.2         # [judgement]
+  supplier_amount: {median: 1450, sigma: 1.0, min: 50, max: 90000}
+  employees: {min: 0, max: 25}          # [judgement]
+  # Some merchants are e-commerce only: no POS channel, higher new-beneficiary
+  # rate, and a different fraud exposure profile.
+  online_only_probability: 0.22         # [judgement]
+
+# ---------------------------------------------------------------------- SMEs
+sme:
+  employees: {min: 3, max: 60}          # [judgement]
+  weekly_supplier_payments: 3.1         # [judgement]
+  supplier_amount: {median: 3200, sigma: 1.1, min: 100, max: 250000}
+  # Salaries are the dominant SME outflow and land on one day, producing a
+  # sharp monthly fan-out that superficially resembles a mule fan-out. That
+  # collision is deliberate: it is the confusable case the model must separate.
+  salary_amount_share: 0.62             # [judgement] share of outflow that is payroll
+
+# -------------------------------------------------------------------- timing
+diurnal:
+  # Hour-of-day weights for consumer-initiated payments, local time. Bimodal:
+  # a lunchtime peak and a larger evening peak. Under SCT Inst these no longer
+  # queue to a batch window, so the intraday shape survives into the data —
+  # which is exactly what a continuous-time model can exploit and a snapshot
+  # model averages away.
+  consumer_hour_weights:
+    [0.4, 0.2, 0.1, 0.1, 0.1, 0.3, 1.0, 2.4, 3.6, 4.4, 5.0, 5.6,
+     6.4, 5.8, 5.0, 4.8, 5.2, 6.2, 7.4, 7.0, 5.6, 3.8, 2.2, 1.1]
+  # Business payments cluster in office hours and essentially stop at weekends.
+  business_hour_weights:
+    [0.1, 0.1, 0.1, 0.1, 0.1, 0.2, 0.8, 2.6, 6.0, 8.2, 8.6, 7.4,
+     5.0, 6.8, 7.8, 7.4, 6.0, 3.6, 1.6, 0.8, 0.4, 0.2, 0.1, 0.1]
+  weekend_consumer_multiplier: 1.15     # [judgement] more retail, less business
+  weekend_business_multiplier: 0.08
+
+# --------------------------------------------------- Verification of Payee
+vop:
+  # Mandatory across the euro area since 2025-10-09 (Reg. EU 2024/886).
+  # [legal] the requirement; [judgement] the rates below.
+  #
+  # The CLOSE_MATCH band is the operationally interesting one: too strict and
+  # honest payments get blocked, too loose and impersonation walks through. The
+  # simulator produces all three bands with realistic causes so that VoP-derived
+  # features have to be learned rather than being a giveaway.
+  legitimate_typo_probability: 0.055    # honest name mistakes -> CLOSE_MATCH
+  legitimate_alias_probability: 0.035   # trading name vs. registered name
+  unavailable_probability: 0.015        # creditor PSP did not answer in time
+  close_match_threshold: 0.82           # similarity at/above this is CLOSE_MATCH
+  match_threshold: 0.97                 # at/above this is MATCH
+  # P(payer proceeds anyway after a warning). Non-trivial for honest payers —
+  # which is why an override alone cannot be treated as proof of fraud.
+  override_probability_legitimate: 0.42
+  override_probability_app_fraud: 0.78  # social engineering defeats the warning
+
+# ------------------------------------------------------- regulatory anchors
+thresholds:
+  # [legal] Reporting and due-diligence thresholds that structuring is designed
+  # to stay under. The simulator places evasive amounts just below these, which
+  # is what makes a naive threshold rule useless and a learned model necessary.
+  cash_report_eur: 10000
+  occasional_transaction_cdd_eur: 1000
+  anacredit_reporting_eur: 25000        # granular credit reporting threshold
+  sct_inst_legacy_cap_eur: 100000       # removed in 2025 - kept to model the regime change
+
+# ------------------------------------------------------------------ channels
+channel_mix:
+  # Rough shares by initiating channel for consumer payments.
+  MOBILE_APP: 0.46        # [public] mobile banking adoption, approximate
+  ONLINE_BANKING: 0.34
+  POS: 0.13
+  STANDING_ORDER: 0.05
+  OPEN_BANKING_API: 0.015 # [public] PSD2 PISP volumes remain small
+  BRANCH: 0.005
