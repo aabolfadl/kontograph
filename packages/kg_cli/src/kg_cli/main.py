@@ -35,6 +35,10 @@ contracts_app = typer.Typer(
 )
 app.add_typer(contracts_app)
 
+from kg_cli.sim import sim_app  # noqa: E402  (after `app` exists)
+
+app.add_typer(sim_app)
+
 
 # --------------------------------------------------------------- version ---
 
