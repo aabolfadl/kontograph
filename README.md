@@ -171,7 +171,7 @@ flowchart LR
 | Milestone | State |
 | --- | --- |
 | **M0** Foundations — workspace, contracts, CI, ADRs, frozen evaluation protocol | ✅ |
-| **M1** Simulator — agents, typologies, ground truth | ⬜ |
+| **M1** Simulator — agents, typologies, ground truth | ✅ |
 | **M2** Streaming spine — event log to lakehouse, quality gates, orchestration | ⬜ |
 | **M3** Feature platform — DSL, three compilers, point-in-time suite | ⬜ |
 | **M4** Baseline — LightGBM, calibration, cost-optimal threshold | ⬜ |
