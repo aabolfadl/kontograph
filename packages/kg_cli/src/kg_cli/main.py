@@ -35,9 +35,12 @@ contracts_app = typer.Typer(
 )
 app.add_typer(contracts_app)
 
-from kg_cli.sim import sim_app  # noqa: E402  (after `app` exists)
+from kg_cli.lake import lake_app, stream_app  # noqa: E402  (after `app` exists)
+from kg_cli.sim import sim_app  # noqa: E402
 
 app.add_typer(sim_app)
+app.add_typer(stream_app)
+app.add_typer(lake_app)
 
 
 # --------------------------------------------------------------- version ---
