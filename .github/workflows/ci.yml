@@ -99,3 +99,43 @@ jobs:
         with:
           name: coverage
           path: coverage.xml
+
+  # ---------------------------------------------------------------------------
+  # Integration against the real stack. Compose is the same file developers run,
+  # not a CI-only variant -- otherwise green CI stops implying `make up` works.
+  # ---------------------------------------------------------------------------
+  integration:
+    name: integration (compose stack)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+
+      # Only the services the integration tests talk to. The one-shot init
+      # containers exit by design, which `--wait` reports as a failure, and the
+      # Redpanda console and MLflow are developer conveniences with no test
+      # coverage -- MLflow alone spends a minute in `pip install` on boot.
+      - name: Start the stack
+        run: docker compose -f docker/compose.yml up -d --wait --wait-timeout 240 redpanda objectstore redis
+
+      - name: Show what came up
+        run: docker compose -f docker/compose.yml ps
+
+      - name: Integration tests
+        env:
+          KG_KAFKA_BOOTSTRAP: localhost:19092
+          KG_SCHEMA_REGISTRY_URL: http://localhost:18081
+          KG_S3_ENDPOINT: http://localhost:9000
+          KG_REDIS_URL: redis://localhost:6379/0
+        run: uv run pytest -m integration -v
+
+      - name: Dump logs on failure
+        if: failure()
+        run: docker compose -f docker/compose.yml logs --tail=200
+
+      - name: Tear down
+        if: always()
+        run: docker compose -f docker/compose.yml down -v
