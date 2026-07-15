@@ -1,0 +1,13 @@
+# dbt-duckdb against the analytics database that `kg lake export` materialises.
+#
+# The path is relative to this file so `dbt run` works from the project
+# directory without an absolute path baked into version control; KG_DUCKDB_PATH
+# overrides it in CI and in the container.
+kontograph:
+  target: local
+  outputs:
+    local:
+      type: duckdb
+      path: "{{ env_var('KG_DUCKDB_PATH', '../../data/warehouse/kontograph.duckdb') }}"
+      threads: 4
+      extensions: []

@@ -1,0 +1,39 @@
+version: 2
+
+sources:
+  - name: silver
+    description: >
+      Validated payments exported from Iceberg by `kg lake export`. Every table
+      here passed the blocking quality gate on promotion; anything that failed a
+      row-level expectation is in bronze.quarantine, not here.
+    meta:
+      owner: kontograph
+      exported_by: kg lake export
+    tables:
+      - name: payments
+        description: One row per settled SEPA Instant credit transfer.
+        columns:
+          - name: tx_id
+            description: Unique end-to-end transaction reference (UETR).
+            data_tests: [unique, not_null]
+          - name: acceptance_ts
+            description: >
+              Event time, epoch milliseconds UTC. Every point-in-time
+              computation orders on this column and nothing else.
+            data_tests: [not_null]
+          - name: amount_cents
+            description: Amount in minor units. Integer; never a float.
+            data_tests: [not_null]
+      - name: accounts
+        description: Account dimension. Attributes are fixed at account opening.
+        columns:
+          - name: account_id
+            data_tests: [unique, not_null]
+      - name: labels
+        description: >
+          Confirmed outcomes. decided_ts is when the outcome became known and is
+          weeks after event_ts -- a model may only use a label whose decided_ts
+          precedes the split boundary.
+        columns:
+          - name: label_id
+            data_tests: [unique, not_null]

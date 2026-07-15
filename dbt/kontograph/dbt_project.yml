@@ -1,0 +1,15 @@
+name: kontograph
+version: '0.1.0'
+config-version: 2
+profile: kontograph
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+target-path: "target"
+clean-targets: ["target", "dbt_packages"]
+
+models:
+  kontograph:
+    gold:
+      +materialized: table
+      +schema: gold
