@@ -1,0 +1,35 @@
+# Flink with the connectors this project needs baked in.
+#
+# The jars are pinned by exact version rather than fetched at job-submit time:
+# a streaming job whose connector version drifts between CI and the laptop is
+# precisely the kind of "works on my machine" the project is arguing against.
+FROM flink:1.20.0-scala_2.12-java17
+
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+ARG FLINK_MINOR=1.20
+ARG ICEBERG_VERSION=1.6.1
+ARG MAVEN=https://repo1.maven.org/maven2
+
+# Kafka source/sink + Avro with Confluent-compatible Schema Registry support.
+# Redpanda's registry speaks the same API, so the Confluent format works as-is.
+RUN set -eux; \
+    cd /opt/flink/lib; \
+    curl -fLO ${MAVEN}/org/apache/flink/flink-sql-connector-kafka/3.2.0-${FLINK_MINOR}/flink-sql-connector-kafka-3.2.0-${FLINK_MINOR}.jar; \
+    curl -fLO ${MAVEN}/org/apache/flink/flink-sql-avro-confluent-registry/${FLINK_MINOR}.0/flink-sql-avro-confluent-registry-${FLINK_MINOR}.0.jar; \
+    curl -fLO ${MAVEN}/org/apache/iceberg/iceberg-flink-runtime-${FLINK_MINOR}/${ICEBERG_VERSION}/iceberg-flink-runtime-${FLINK_MINOR}-${ICEBERG_VERSION}.jar; \
+    curl -fLO ${MAVEN}/org/apache/hadoop/hadoop-aws/3.3.4/hadoop-aws-3.3.4.jar; \
+    curl -fLO ${MAVEN}/com/amazonaws/aws-java-sdk-bundle/1.12.648/aws-java-sdk-bundle-1.12.648.jar
+
+# S3A against the SeaweedFS object store: path-style access is required, and the default
+# DefaultAWSCredentialsProviderChain picks up the AWS_* env vars from compose.
+RUN printf '%s\n' \
+    'fs.s3a.endpoint: http://objectstore:9000' \
+    'fs.s3a.path.style.access: true' \
+    'fs.s3a.connection.ssl.enabled: false' \
+    >> /opt/flink/conf/config.yaml || true
+
+USER flink
