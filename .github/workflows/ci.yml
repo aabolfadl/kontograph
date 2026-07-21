@@ -101,6 +101,36 @@ jobs:
           path: coverage.xml
 
   # ---------------------------------------------------------------------------
+  # THE LEAKAGE GATE.
+  #
+  # Design principle P2: point-in-time correctness is "a hard invariant enforced in
+  # code and tested in CI, not a best practice we promise to remember". This job
+  # exists separately, and is a required check, so that "the PIT suite is
+  # failing but the feature works" can never be a reviewable position.
+  #
+  # It runs with a raised hypothesis budget, because the failures that matter
+  # here are rare orderings that a default example count will not find.
+  # ---------------------------------------------------------------------------
+  point-in-time:
+    name: point-in-time correctness
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+      - run: uv sync --all-packages
+      - name: Property suite (extended budget)
+        env:
+          HYPOTHESIS_PROFILE: ci
+        run: uv run pytest tests/property -v --hypothesis-seed=0
+
+      # The same guarantee, executed against the real feature registry rather
+      # than the compact coverage set used by the property tests.
+      - name: Cross-backend equivalence on the production feature set
+        run: uv run kg features verify --events 800
+
+  # ---------------------------------------------------------------------------
   # Integration against the real stack. Compose is the same file developers run,
   # not a CI-only variant -- otherwise green CI stops implying `make up` works.
   # ---------------------------------------------------------------------------

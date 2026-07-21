@@ -173,7 +173,7 @@ flowchart LR
 | **M0** Foundations — workspace, contracts, CI, ADRs, frozen evaluation protocol | ✅ |
 | **M1** Simulator — agents, typologies, ground truth | ✅ |
 | **M2** Streaming spine — event log to lakehouse, quality gates, orchestration | ✅ |
-| **M3** Feature platform — DSL, three compilers, point-in-time suite | ⬜ |
+| **M3** Feature platform — DSL, three compilers, point-in-time suite | ✅ |
 | **M4** Baseline — LightGBM, calibration, cost-optimal threshold | ⬜ |
 | **M5** Temporal graph network and amortised explainer | ⬜ |
 | **M6** Serving — gateway, decision log, load test, latency budget | ⬜ |

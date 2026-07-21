@@ -60,6 +60,12 @@ logs: ## Tail stack logs
 ps: ## Show stack status
 	$(COMPOSE) ps
 
+# Flink is a separate profile: it is the specified streaming engine,
+# but a JVM cluster is heavy on a laptop. See ADR-0002.
+.PHONY: flink-up
+flink-up: ## Start the optional Flink profile
+	docker compose -f docker/compose.yml -f docker/compose.flink.yml --profile flink up -d
+
 # ------------------------------------------------------------------- code --
 
 .PHONY: test
@@ -90,3 +96,47 @@ contracts: ## Fail if a contract change would break existing consumers
 
 .PHONY: ci
 ci: lint typecheck contracts test ## Everything CI runs
+
+# ---------------------------------------------------------------- pipeline --
+
+.PHONY: sim
+sim: ## Generate the synthetic payments dataset
+	$(UV) kg sim generate
+
+.PHONY: register
+register: ## Register the Avro contracts with the Schema Registry
+	$(UV) kg stream register
+
+.PHONY: replay
+replay: ## Replay the dataset onto the payments topic
+	$(UV) kg stream replay
+
+.PHONY: ingest
+ingest: ## Load payments into the bronze Iceberg layer
+	$(UV) kg lake ingest
+
+.PHONY: promote
+promote: ## Promote bronze to silver through the quality gate
+	$(UV) kg lake promote
+
+.PHONY: marts
+marts: ## Export silver to DuckDB and build the gold marts with dbt
+	$(UV) kg lake export
+	$(UV) kg lake dbt build
+
+.PHONY: features
+features: ## Build the training feature table from silver
+	$(UV) kg features build
+
+.PHONY: verify-pit
+verify-pit: ## Prove the backends agree and nothing sees the future
+	$(UV) kg features verify
+
+# The whole pipeline, in order. This is the target that demonstrates the
+# streaming spine end to end.
+.PHONY: pipeline
+pipeline: sim ingest promote marts features ## Simulator -> bronze -> silver -> gold -> features
+
+.PHONY: dagster
+dagster: ## Open the Dagster asset graph (needs the orchestration extra)
+	$(UV) dagster dev -f orchestration/dagster/definitions.py
