@@ -40,9 +40,20 @@ between them labelled as "what label bias costs you".
                        |<-embargo->|                  |<-embargo->|
 ```
 
-- **Purge and embargo.** Purge width = the maximum feature window (30 d). Any training
-  transaction whose feature window overlaps the validation start is dropped, and the same embargo is
-  applied after each boundary, so that no information can cross a boundary through a long window.
+- **Purge and embargo, 1 day each.** Transactions within one day on either side of a boundary are
+  dropped. What this addresses is *residual correlation*, not leakage: a training event just before
+  `t1` and a validation event just after it share almost all of their feature history, so their
+  errors are correlated and the validation estimate is slightly optimistic.
+
+  It does **not** prevent feature leakage — the feature layer already guarantees no feature reads
+  forward, and that guarantee is enforced by the point-in-time property suite, not by this band.
+
+  The band is deliberately narrow. A validation event whose features were partly computed from
+  training-period history is not contaminated; that is exactly what happens in production on the
+  day after deployment, and treating it as a defect would be modelling a problem that does not
+  exist. `kg_eval.splits.make_boundaries` refuses a band wider than a quarter of the shortest
+  fold, because an over-wide band empties the training set and the resulting error surfaces
+  several layers away from its cause.
 - **Label availability.** A label may enter training only if `decided_ts < t1`. A label whose
   `event_ts` is in the training window but whose `decided_ts` is after the boundary **does not
   exist** as far as the training run is concerned. This is the difference between an honest backtest
@@ -207,3 +218,4 @@ does not match the current tree is regenerated, never quoted.
 | Date | Change | Reason |
 |---|---|---|
 | 2026-07-04 | Initial protocol, frozen before any model was trained | Engineering invariant: no metric chosen after seeing the results |
+| 2026-07-22 | **Corrected the purge rule** from "purge width = the maximum feature window (30 d)" to a 1-day band on both sides, with a guard | The original rule was justified by "any training transaction whose feature window overlaps the validation start", which is not possible — a training event's window points *backwards*. Applied literally on a 30-day dataset it purged 27,405 of 34,769 rows (79 %) and left only the test fold. The mechanism that actually prevents leakage is the point-in-time feature layer plus the `decided_ts` label filter, both of which are unchanged. Found before any model was trained. |
