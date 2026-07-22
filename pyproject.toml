@@ -11,6 +11,7 @@ dependencies = [
     "kg-sim",
     "kg-lake",
     "kg-features",
+    "kg-eval",
     "kg-stream",
     "kg-cli",
 ]
@@ -68,6 +69,7 @@ kg-core = { workspace = true }
 kg-sim = { workspace = true }
 kg-lake = { workspace = true }
 kg-features = { workspace = true }
+kg-eval = { workspace = true }
 kg-stream = { workspace = true }
 kg-cli = { workspace = true }
 

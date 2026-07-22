@@ -8,6 +8,7 @@ dependencies = [
     "kg-sim",
     "kg-lake",
     "kg-features",
+    "kg-eval",
     "kg-stream",
     "typer>=0.12",
     "rich>=13.7",
