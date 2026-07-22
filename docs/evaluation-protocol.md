@@ -89,16 +89,26 @@ but the headline number is always the `k = 200` one. Sensitivity to `k` is repor
 
 ## 4. Cost model
 
+All four cells are **absolute costs**: the money the institution is out by, given what happened.
+Mixing an absolute cost with one measured relative to a do-nothing baseline is an easy and
+consequential mistake — see the changelog entry for 2026-07-22.
+
 | | Predicted negative | Predicted positive |
 |---|---|---|
 | **Truly negative** | 0 | `C_FP` = €35 investigation + €12 friction = **€47** |
-| **Truly positive** | `C_FN` = the transaction amount, capped at €100 000 | `C_TP` = €35 investigation − recovered amount |
+| **Truly positive** | `C_FN` = the transaction amount, capped at €100 000 | `C_TP` = €35 investigation + (1 − *p*) × amount |
 
-The per-transaction `C_FN` matters — missing a €40 mule hop and missing a
+where *p* = **0.85** is the share of the loss actually prevented by alerting in time. It is high
+because that is the premise of the project: a decision inside the ten-second window can hold the
+payment before it settles irrevocably. It is not 1.0 — some alerts land after settlement, some are
+overridden by the payer, and some funds are already gone.
+
+`C_TP` is therefore always **positive and below `C_FN`**: catching fraud reduces cost, it never
+creates income. The per-transaction `C_FN` matters too — missing a €40 mule hop and missing a
 €90,000 APP fraud are not the same mistake, and a threshold tuned against an averaged constant
 systematically under-alerts on the large ones.
 
-`C_FP` and the investigation cost are order-of-magnitude estimates for a mid-sized German
+`C_FP`, the investigation cost and *p* are order-of-magnitude estimates for a mid-sized German
 institution, stated as assumptions and varied in a sensitivity analysis over
 `C_FN/C_FP ∈ {10, 50, 100, 500}`. They are not measured facts and are not presented as such.
 
@@ -219,3 +229,4 @@ does not match the current tree is regenerated, never quoted.
 |---|---|---|
 | 2026-07-04 | Initial protocol, frozen before any model was trained | Engineering invariant: no metric chosen after seeing the results |
 | 2026-07-22 | **Corrected the purge rule** from "purge width = the maximum feature window (30 d)" to a 1-day band on both sides, with a guard | The original rule was justified by "any training transaction whose feature window overlaps the validation start", which is not possible — a training event's window points *backwards*. Applied literally on a 30-day dataset it purged 27,405 of 34,769 rows (79 %) and left only the test fold. The mechanism that actually prevents leakage is the point-in-time feature layer plus the `decided_ts` label filter, both of which are unchanged. Found before any model was trained. |
+| 2026-07-22 | **Corrected `C_TP`** from `€35 − recovered amount` to `€35 + (1 − p) × amount`, and named the prevention fraction *p* = 0.85 | The original formula priced a true positive *relative to a do-nothing baseline* while pricing a false negative *absolutely*, which made catching fraud profitable rather than merely cheaper. The threshold optimiser exploited it exactly as written: on a synthetic check it preferred catching 2.7 % of fraud over catching 97 %, because alerting less scored a lower "cost". Found before any model was trained, so no reported result was ever computed under the old formula. |
