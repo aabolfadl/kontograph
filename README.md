@@ -175,7 +175,7 @@ flowchart LR
 | **M2** Streaming spine — event log to lakehouse, quality gates, orchestration | ✅ |
 | **M3** Feature platform — DSL, three compilers, point-in-time suite | ✅ |
 | **M4** Baseline — LightGBM, calibration, cost-optimal threshold | ✅ |
-| **M5** Temporal graph network and amortised explainer | ⬜ |
+| **M5** Temporal graph network and amortised explainer | ✅ |
 | **M6** Serving — gateway, decision log, load test, latency budget | ⬜ |
 | **M7** Governance — model cards, lineage, AI Act memo | ⬜ |
 | **M8** Investigator console and technical write-up | ⬜ |
