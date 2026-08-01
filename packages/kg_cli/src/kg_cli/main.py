@@ -39,6 +39,7 @@ from kg_cli.evaluate import eval_app, train_app  # noqa: E402  (after `app` exis
 from kg_cli.features import features_app  # noqa: E402
 from kg_cli.kaggle import kaggle_app  # noqa: E402
 from kg_cli.lake import lake_app, stream_app  # noqa: E402
+from kg_cli.serve import serve_app  # noqa: E402
 from kg_cli.sim import sim_app  # noqa: E402
 
 app.add_typer(sim_app)
@@ -48,6 +49,7 @@ app.add_typer(features_app)
 app.add_typer(train_app)
 app.add_typer(eval_app)
 app.add_typer(kaggle_app)
+app.add_typer(serve_app)
 
 
 # --------------------------------------------------------------- version ---
