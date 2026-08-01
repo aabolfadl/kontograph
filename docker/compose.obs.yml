@@ -1,0 +1,46 @@
+# Optional observability profile.
+#
+#   make obs-up
+#
+# Separate from the default stack for the same reason as Flink: `make up` has to
+# stay fast. Drift and SLO dashboards matter for the governance story (the platform scope,
+# Monitoring), but a first run should not pay for them.
+
+name: kontograph
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    container_name: kontograph-prometheus
+    profiles: ["obs"]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-lifecycle
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+
+  grafana:
+    image: grafana/grafana:11.3.1
+    container_name: kontograph-grafana
+    profiles: ["obs"]
+    depends_on: [prometheus]
+    environment:
+      GF_SECURITY_ADMIN_USER: kontograph
+      GF_SECURITY_ADMIN_PASSWORD: kontograph
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"      # a demo nobody can log into is not a demo
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  prometheus-data:
+  grafana-data:

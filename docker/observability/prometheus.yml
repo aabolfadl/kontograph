@@ -1,0 +1,24 @@
+# Scrape config for the KONTOGRAPH stack.
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+  external_labels:
+    project: kontograph
+
+scrape_configs:
+  # The decision gateway. The SLO that matters lives here: p99 end-to-end
+  # latency, exported as a histogram so the quantile is computed from buckets
+  # rather than from a pre-averaged number that hides the tail.
+  - job_name: kontograph-gateway
+    static_configs:
+      - targets: ["host.docker.internal:8000"]
+    metrics_path: /metrics
+
+  - job_name: redpanda
+    static_configs:
+      - targets: ["redpanda:9644"]
+    metrics_path: /public_metrics
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
