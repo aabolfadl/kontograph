@@ -15,7 +15,7 @@ one that matters: a decision with no falsifier is a preference.
 | [0005](0005-own-feature-dsl.md) | A small in-house feature DSL | Feast, Tecton, dbt-only features |
 | [0006](0006-continuous-time-tgn.md) | Continuous-time TGN | Snapshot GNN; static graph features |
 | [0007](0007-amortised-explainer.md) | Amortised explainer distilled from a slow teacher | GNNExplainer at serving time |
-| [0008](0008-onnx-runtime-not-triton.md) | ONNX Runtime in-process | NVIDIA Triton |
+| [0008](0008-onnx-runtime-not-triton.md) | In-process inference; ONNX as a portability artifact | NVIDIA Triton |
 | [0009](0009-content-hashed-datasets.md) | Content-hashed dataset manifests | DVC |
 | [0010](0010-compose-now-k8s-later.md) | Docker Compose as the deployment target | Kubernetes and Terraform at this stage |
 | [0011](0011-native-quality-gate.md) | Native quality gate on the blocking path | Great Expectations inline |
