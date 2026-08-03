@@ -14,6 +14,7 @@ dependencies = [
     "kg-models",
     "kg-eval",
     "kg-serve",
+    "kg-gov",
     "kg-stream",
     "kg-cli",
 ]
@@ -74,6 +75,7 @@ kg-features = { workspace = true }
 kg-models = { workspace = true }
 kg-eval = { workspace = true }
 kg-serve = { workspace = true }
+kg-gov = { workspace = true }
 kg-stream = { workspace = true }
 kg-cli = { workspace = true }
 

@@ -10,6 +10,7 @@ dependencies = [
     "kg-features",
     "kg-models",
     "kg-eval",
+    "kg-gov",
     "kg-stream",
     "kg-serve",
     "typer>=0.12",

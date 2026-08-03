@@ -9,6 +9,7 @@ dependencies = [
     "kg-models",
     "kg-sim",
     "kg-stream",
+    "kg-gov",
     "fastapi>=0.111",
     "uvicorn[standard]>=0.30",
     "redis>=5.0",
