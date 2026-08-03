@@ -66,6 +66,10 @@ ps: ## Show stack status
 flink-up: ## Start the optional Flink profile
 	docker compose -f docker/compose.yml -f docker/compose.flink.yml --profile flink up -d
 
+.PHONY: obs-up
+obs-up: ## Start the optional observability profile (Prometheus + Grafana)
+	docker compose -f docker/compose.yml -f docker/compose.obs.yml --profile obs up -d
+
 # ------------------------------------------------------------------- code --
 
 .PHONY: test
@@ -140,3 +144,19 @@ pipeline: sim ingest promote marts features ## Simulator -> bronze -> silver -> 
 .PHONY: dagster
 dagster: ## Open the Dagster asset graph (needs the orchestration extra)
 	$(UV) dagster dev -f orchestration/dagster/definitions.py
+
+.PHONY: eval
+eval: ## Regenerate every published number from artifacts
+	$(UV) kg eval report
+
+.PHONY: serve
+serve: ## Run the decision gateway locally
+	$(UV) kg serve run
+
+.PHONY: loadtest
+loadtest: ## k6 load test; fails if p99 exceeds the SLA
+	$(UV) kg serve loadtest
+
+.PHONY: govern
+govern: ## Regenerate model cards, lineage and the decision-log audit
+	$(UV) kg gov all

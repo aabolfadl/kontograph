@@ -176,7 +176,7 @@ flowchart LR
 | **M3** Feature platform — DSL, three compilers, point-in-time suite | ✅ |
 | **M4** Baseline — LightGBM, calibration, cost-optimal threshold | ✅ |
 | **M5** Temporal graph network and amortised explainer | ✅ |
-| **M6** Serving — gateway, decision log, load test, latency budget | ⬜ |
+| **M6** Serving — gateway, decision log, load test, latency budget | ✅ |
 | **M7** Governance — model cards, lineage, AI Act memo | ⬜ |
 | **M8** Investigator console and technical write-up | ⬜ |
 
