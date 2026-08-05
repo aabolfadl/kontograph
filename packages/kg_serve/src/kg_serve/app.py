@@ -33,6 +33,7 @@ from pydantic import BaseModel, Field
 
 from kg_core.config import get_settings
 from kg_core.logging import get_logger
+from kg_serve import console_api
 from kg_serve.decision_log import DecisionLog, build_record
 from kg_serve.latency import LatencyBudget
 
@@ -106,6 +107,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         log.error("failed to load the model", error=str(error))
         STATE["load_error"] = str(error)
 
+    # The console reads the same loaded engine rather than loading its own.
+    console_api.bind(STATE)
+
     yield
 
     # Drain the decision-log writes before the loop closes. A record that was
@@ -159,6 +163,10 @@ app = FastAPI(
     version="0.1.0",
     lifespan=lifespan,
 )
+
+# The demo surface. Registered after `app` so the console can be developed
+# without touching the decision path.
+app.include_router(console_api.router)
 
 
 @app.post("/score", response_model=ScoreResponse)

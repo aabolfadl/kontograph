@@ -1,0 +1,317 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>KONTOGRAPH — Investigator console</title>
+<style>
+  /* Self-contained: no CDN, no build step. The graph is hand-rolled SVG rather
+     than Cytoscape, because a demo that fails when the network does is not a
+     demo, and `make up` has to work on a laptop with nothing installed. */
+  :root {
+    --bg: #0d1117; --panel: #161b22; --line: #21262d; --ink: #e6edf3;
+    --dim: #8b949e; --accent: #58a6ff; --ok: #3fb950; --warn: #d29922;
+    --bad: #f85149; --edge: #30363d;
+  }
+  :root[data-theme="light"] {
+    --bg: #ffffff; --panel: #f6f8fa; --line: #d0d7de; --ink: #1f2328;
+    --dim: #656d76; --accent: #0969da; --ok: #1a7f37; --warn: #9a6700;
+    --bad: #cf222e; --edge: #d0d7de;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 ui-sans-serif, -apple-system, "Segoe UI", system-ui, sans-serif;
+  }
+  header {
+    display: flex; align-items: center; gap: 16px; padding: 12px 20px;
+    border-bottom: 1px solid var(--line); background: var(--panel);
+    position: sticky; top: 0; z-index: 10;
+  }
+  header h1 { font-size: 15px; margin: 0; letter-spacing: .14em; font-weight: 650; }
+  header .sub { color: var(--dim); font-size: 12px; }
+  .spacer { flex: 1; }
+  button {
+    background: var(--panel); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 12px; cursor: pointer; font: inherit; font-size: 13px;
+  }
+  button:hover { border-color: var(--accent); }
+  button[data-active="true"] { border-color: var(--accent); color: var(--accent); }
+  main { display: grid; grid-template-columns: minmax(300px, 380px) 1fr; min-height: calc(100vh - 53px); }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  #queue { border-right: 1px solid var(--line); overflow-y: auto; max-height: calc(100vh - 53px); }
+  .alert {
+    padding: 12px 16px; border-bottom: 1px solid var(--line); cursor: pointer;
+    display: grid; grid-template-columns: 1fr auto; gap: 4px 12px;
+  }
+  .alert:hover { background: var(--panel); }
+  .alert[data-selected="true"] { background: var(--panel); border-left: 3px solid var(--accent); padding-left: 13px; }
+  .alert .tx { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 12px; color: var(--dim); }
+  .alert .amount { font-variant-numeric: tabular-nums; font-weight: 600; }
+  .score { font-variant-numeric: tabular-nums; font-weight: 700; }
+  .score.ALERT { color: var(--warn); } .score.HOLD { color: var(--bad); }
+  .score.BLOCK { color: var(--bad); } .score.ALLOW { color: var(--dim); }
+  .pill {
+    display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px;
+    border: 1px solid var(--line); color: var(--dim);
+  }
+  .pill.bad { color: var(--bad); border-color: var(--bad); }
+  .pill.warn { color: var(--warn); border-color: var(--warn); }
+  #detail { padding: 20px 24px; overflow-y: auto; max-height: calc(100vh - 53px); }
+  .empty { color: var(--dim); padding: 60px 20px; text-align: center; }
+  h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .1em; color: var(--dim);
+       margin: 26px 0 10px; font-weight: 600; }
+  h2:first-child { margin-top: 0; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; }
+  svg { width: 100%; height: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 8px; }
+  .node { fill: var(--edge); stroke: var(--line); stroke-width: 1.5; }
+  .node.subject { fill: var(--accent); }
+  .node.counterfactual { fill: var(--bad); }
+  .link { stroke: var(--edge); stroke-width: 1.5; fill: none; }
+  .link.salient { stroke: var(--warn); stroke-width: 2.5; }
+  .link.counterfactual { stroke: var(--bad); stroke-width: 3; stroke-dasharray: 5 3; }
+  .label { fill: var(--dim); font-size: 10px; font-family: ui-monospace, Menlo, monospace; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  td, th { padding: 6px 8px; text-align: left; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; font-size: 12px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; }
+  .narrative { line-height: 1.65; }
+  .disclaimer {
+    border-left: 3px solid var(--warn); padding: 10px 14px; margin-bottom: 12px;
+    color: var(--warn); font-size: 12px; background: color-mix(in srgb, var(--warn) 8%, transparent);
+  }
+  .muted { color: var(--dim); font-size: 12px; margin-top: 8px; }
+  .feedback { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 12px; }
+  .latency { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--dim); }
+  .latency b { color: var(--ink); font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<header>
+  <h1>KONTOGRAPH</h1>
+  <span class="sub" id="status">connecting…</span>
+  <span class="spacer"></span>
+  <button id="lang" data-lang="en">Deutsch</button>
+  <button id="theme">Light</button>
+  <button id="replay">Replay stream</button>
+</header>
+
+<main>
+  <div id="queue"><div class="empty">No alerts yet.<br><span class="muted">Press “Replay stream”.</span></div></div>
+  <div id="detail"><div class="empty">Select an alert.</div></div>
+</main>
+
+<script>
+"use strict";
+const $ = (s) => document.querySelector(s);
+let ALERTS = [], SELECTED = null, LANG = "en";
+
+const eur = (cents) => (cents / 100).toLocaleString("en-GB", { style: "currency", currency: "EUR" });
+const when = (ms) => new Date(ms).toISOString().replace("T", " ").slice(0, 19);
+
+// ---------------------------------------------------------------- queue ----
+function renderQueue() {
+  const queue = $("#queue");
+  if (!ALERTS.length) {
+    queue.innerHTML = '<div class="empty">No alerts yet.<br><span class="muted">Press “Replay stream”.</span></div>';
+    return;
+  }
+  queue.innerHTML = ALERTS.map((a, i) => `
+    <div class="alert" data-i="${i}" data-selected="${SELECTED === i}">
+      <div class="tx">${a.tx_id.slice(0, 18)}</div>
+      <div class="score ${a.decision}">${a.score.toFixed(3)}</div>
+      <div class="amount">${eur(a.amount_cents)}</div>
+      <div><span class="pill ${a.decision === "ALLOW" ? "" : "warn"}">${a.decision}</span></div>
+      <div class="muted">${a.debtor_account_id} → ${a.creditor_account_id}</div>
+      <div class="muted">${a.vop_result !== "MATCH" ? `<span class="pill bad">${a.vop_result}</span>` : ""}</div>
+    </div>`).join("");
+  queue.querySelectorAll(".alert").forEach((el) =>
+    el.addEventListener("click", () => { SELECTED = +el.dataset.i; renderQueue(); renderDetail(); }));
+}
+
+// ------------------------------------------------------------ the graph ----
+// Hand-rolled SVG. The subject payment is the blue node pair; edges the
+// explainer marked salient are amber; edges the COUNTERFACTUAL would remove are
+// red and dashed -- those are the ones whose removal was verified to drop the
+// score below threshold, not merely ranked highly.
+function renderGraph(alert) {
+  const nodes = new Map();
+  const edges = [];
+  const add = (id) => { if (!nodes.has(id)) nodes.set(id, { id, i: nodes.size }); return nodes.get(id); };
+
+  add(alert.debtor_account_id); add(alert.creditor_account_id);
+  edges.push({ from: alert.debtor_account_id, to: alert.creditor_account_id, kind: "subject",
+               label: eur(alert.amount_cents) });
+
+  const removed = new Set(alert.counterfactual?.removed_tx_ids || []);
+  (alert.neighbourhood || []).forEach((e) => {
+    add(e.debtor_account_id); add(e.creditor_account_id);
+    edges.push({
+      from: e.debtor_account_id, to: e.creditor_account_id,
+      kind: removed.has(e.tx_id) ? "counterfactual" : (e.salient ? "salient" : "context"),
+      label: eur(e.amount_cents), tx: e.tx_id,
+    });
+  });
+
+  const W = 760, H = 300, cx = W / 2, cy = H / 2, r = Math.min(W, H) / 2 - 52;
+  const n = nodes.size;
+  const place = (i) => n === 1
+    ? { x: cx, y: cy }
+    : { x: cx + r * Math.cos((2 * Math.PI * i) / n - Math.PI / 2),
+        y: cy + r * Math.sin((2 * Math.PI * i) / n - Math.PI / 2) };
+
+  const positions = new Map([...nodes.values()].map((v) => [v.id, place(v.i)]));
+  const subjects = new Set([alert.debtor_account_id, alert.creditor_account_id]);
+  const cfNodes = new Set(edges.filter((e) => e.kind === "counterfactual").flatMap((e) => [e.from, e.to]));
+
+  const svgEdges = edges.map((e) => {
+    const a = positions.get(e.from), b = positions.get(e.to);
+    const cls = e.kind === "subject" ? "link salient" : `link ${e.kind}`;
+    // Curve, so reciprocal edges (A->B and B->A) do not overlap into one line.
+    const mx = (a.x + b.x) / 2 + (b.y - a.y) * 0.12;
+    const my = (a.y + b.y) / 2 - (b.x - a.x) * 0.12;
+    return `<path class="${cls}" d="M${a.x},${a.y} Q${mx},${my} ${b.x},${b.y}"
+             marker-end="url(#arrow)"><title>${e.label}${e.tx ? " · " + e.tx : ""}</title></path>`;
+  }).join("");
+
+  const svgNodes = [...nodes.values()].map((v) => {
+    const p = positions.get(v.id);
+    const cls = subjects.has(v.id) ? "node subject" : (cfNodes.has(v.id) ? "node counterfactual" : "node");
+    return `<circle class="${cls}" cx="${p.x}" cy="${p.y}" r="9"><title>${v.id}</title></circle>
+            <text class="label" x="${p.x}" y="${p.y - 15}" text-anchor="middle">${v.id.slice(-6)}</text>`;
+  }).join("");
+
+  return `<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Transaction subgraph">
+    <defs><marker id="arrow" viewBox="0 0 10 10" refX="16" refY="5" markerWidth="5" markerHeight="5"
+      orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="var(--edge)"/></marker></defs>
+    ${svgEdges}${svgNodes}</svg>`;
+}
+
+// ----------------------------------------------------------- the detail ----
+function renderDetail() {
+  const a = ALERTS[SELECTED];
+  if (!a) { $("#detail").innerHTML = '<div class="empty">Select an alert.</div>'; return; }
+
+  const cf = a.counterfactual;
+  const narrative = LANG === "de" ? a.narrative_de : a.narrative_en;
+  const lat = a.latency_ms || {};
+
+  const cfBlock = !cf ? '<div class="card muted">No counterfactual was computed for this alert.</div>'
+    : cf.found || cf.crosses_threshold
+      ? `<div class="card">
+           <div><b>Removing ${cf.removed_tx_ids?.length ?? 1} payment(s) drops the score below threshold.</b></div>
+           <table><tr><th>Score now</th><td class="num">${a.score.toFixed(3)}</td></tr>
+           <tr><th>Without them</th><td class="num">${(cf.score_after ?? 0).toFixed(3)}</td></tr>
+           <tr><th>Threshold</th><td class="num">${a.threshold.toFixed(3)}</td></tr></table>
+           <div class="muted">Verified by re-scoring the model without those payments — not predicted.
+             The red dashed edges above are exactly these.</div>
+         </div>`
+      : `<div class="card">No small set of payments explains this alert on its own.
+           <div class="muted">${cf.reason || "The score reflects the account's broader pattern."}</div></div>`;
+
+  $("#detail").innerHTML = `
+    <h2>Alert</h2>
+    <div class="card">
+      <table>
+        <tr><th>Transaction</th><td><code>${a.tx_id}</code></td></tr>
+        <tr><th>Amount</th><td class="num">${eur(a.amount_cents)}</td></tr>
+        <tr><th>From → to</th><td><code>${a.debtor_account_id}</code> → <code>${a.creditor_account_id}</code></td></tr>
+        <tr><th>Accepted</th><td>${when(a.acceptance_ts)}</td></tr>
+        <tr><th>Score</th><td class="num"><b class="score ${a.decision}">${a.score.toFixed(4)}</b>
+            vs threshold ${a.threshold.toFixed(4)}</td></tr>
+        <tr><th>Verification of Payee</th><td>
+            <span class="pill ${a.vop_result === "MATCH" ? "" : "bad"}">${a.vop_result}</span>
+            ${a.vop_overridden ? '<span class="pill warn">payer overrode the warning</span>' : ""}</td></tr>
+      </table>
+      <div class="latency" style="margin-top:12px">
+        ${Object.entries(lat).filter(([k]) => k !== "unaccounted")
+          .map(([k, v]) => `<span>${k} <b>${v.toFixed(2)} ms</b></span>`).join("")}
+      </div>
+    </div>
+
+    <h2>Subgraph</h2>
+    ${renderGraph(a)}
+    <div class="muted">Blue: this payment's accounts. Amber: edges the explainer marked salient.
+      Red dashed: the counterfactual — remove these and the score falls below threshold.</div>
+
+    <h2>Counterfactual</h2>
+    ${cfBlock}
+
+    <h2>Why this scored high</h2>
+    <div class="card">
+      <table><tr><th>Feature</th><th class="num">Value</th><th class="num">Contribution</th></tr>
+      ${(a.top_features || []).map((f) => `<tr><td><code>${f.feature}</code></td>
+        <td class="num">${Number(f.value).toLocaleString()}</td>
+        <td class="num">${f.contribution >= 0 ? "+" : ""}${f.contribution.toFixed(4)}</td></tr>`).join("")}
+      </table>
+    </div>
+
+    <h2>SAR narrative draft — ${LANG === "de" ? "Deutsch" : "English"}</h2>
+    <div class="disclaimer">${LANG === "de"
+      ? "MASCHINELL ERSTELLTER ENTWURF — KEINE MELDUNG. Vor einer Verdachtsmeldung durch den Geldwäschebeauftragten zu prüfen."
+      : "MACHINE-GENERATED DRAFT — NOT A FILING. Requires review by a responsible officer before any report is filed."}</div>
+    <div class="card narrative">${narrative || "—"}</div>
+
+    <h2>Analyst decision</h2>
+    <div class="feedback">
+      <button data-verdict="ESCALATE_SAR">Escalate — file SAR</button>
+      <button data-verdict="ESCALATE_INTERNAL">Escalate internally</button>
+      <button data-verdict="DISMISS_FALSE_POSITIVE">Dismiss — false positive</button>
+      <button data-verdict="NEEDS_MORE_INFO">Needs more information</button>
+    </div>
+    <div class="muted" id="fb">Feedback is published back onto Kafka as a training signal.
+      Whether the <i>explanation</i> helped is recorded separately from whether the alert was
+      correct — an explainer can be faithful and still useless.</div>`;
+
+  $("#detail").querySelectorAll("[data-verdict]").forEach((b) =>
+    b.addEventListener("click", () => sendFeedback(a, b.dataset.verdict)));
+}
+
+async function sendFeedback(alert, verdict) {
+  try {
+    await fetch("/api/feedback", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ alert_id: alert.alert_id, tx_id: alert.tx_id, verdict }),
+    });
+    $("#fb").innerHTML = `<b>Recorded: ${verdict}.</b> Published to the feedback topic.`;
+  } catch (e) { $("#fb").textContent = "Could not record feedback: " + e.message; }
+}
+
+// ------------------------------------------------------------- controls ----
+$("#theme").addEventListener("click", () => {
+  const light = document.documentElement.dataset.theme === "light";
+  document.documentElement.dataset.theme = light ? "dark" : "light";
+  $("#theme").textContent = light ? "Light" : "Dark";
+});
+$("#lang").addEventListener("click", () => {
+  LANG = LANG === "en" ? "de" : "en";
+  $("#lang").textContent = LANG === "en" ? "Deutsch" : "English";
+  renderDetail();
+});
+$("#replay").addEventListener("click", replay);
+
+async function replay() {
+  const button = $("#replay");
+  button.disabled = true; button.textContent = "Replaying…";
+  $("#status").textContent = "scoring a live payment stream…";
+  try {
+    const response = await fetch("/api/replay?limit=400");
+    const data = await response.json();
+    ALERTS = data.alerts; SELECTED = ALERTS.length ? 0 : null;
+    $("#status").textContent =
+      `${data.scored.toLocaleString()} payments scored · ${data.alerts.length} alerts · ` +
+      `p99 ${data.p99_ms.toFixed(1)} ms (SLA ${data.sla_ms} ms)`;
+    renderQueue(); renderDetail();
+  } catch (e) {
+    $("#status").textContent = "replay failed: " + e.message;
+  } finally { button.disabled = false; button.textContent = "Replay stream"; }
+}
+
+fetch("/health").then((r) => r.json()).then((h) => {
+  $("#status").textContent = h.model_loaded
+    ? `model loaded · ${h.tracked_entities.toLocaleString()} accounts tracked`
+    : "model not loaded — run `kg train baseline`";
+}).catch(() => { $("#status").textContent = "gateway unreachable"; });
+</script>
+</body>
+</html>
