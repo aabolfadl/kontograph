@@ -53,3 +53,7 @@ dbt/kontograph/logs/
 # dbt writes an anonymous tracking id here; machine-local, never committed.
 dbt/**/.user.yml
 
+# LaTeX build artifacts
+paper/*.log
+paper/*.aux
+paper/*.out
